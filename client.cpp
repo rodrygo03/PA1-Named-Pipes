@@ -12,6 +12,7 @@
 */
 #include "common.h"
 #include "FIFORequestChannel.h"
+#include <iostream>
 
 using namespace std;
 
@@ -43,8 +44,16 @@ int main (int argc, char *argv[]) {
 
 	//Task 1:
 	//Run the server process as a child of the client process
+	pid_t child = fork();
+	if (child == 0)
+	{
+		char* cmd[] = {(char*)"./server", (char*)"NULL"};
+		execvp(cmd[0], cmd);		
+	}
 
 	FIFORequestChannel chan("control", FIFORequestChannel::CLIENT_SIDE);
+
+
 
 	//Task 4:
 	//Request a new channel
