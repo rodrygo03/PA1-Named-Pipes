@@ -26,10 +26,10 @@ int main (int argc, char *argv[]) {
 	size_t buff_cap = MAX_MESSAGE;      // optinal buffer capacity
 	string filename = "";
 
-	
+	bool new_chan = false;				// optianl new channel
 
 	//Add other arguments here
-	while ((opt = getopt(argc, argv, "p:t:e:f:m:")) != -1) {
+	while ((opt = getopt(argc, argv, "p:t:e:f:m:c")) != -1) {
 		switch (opt) {
 			case 'p':
 				p = atoi (optarg);
@@ -46,6 +46,9 @@ int main (int argc, char *argv[]) {
 			case 'm':
 				buff_cap = atoi (optarg);
 				break;
+			case 'c':
+				new_chan = true;
+				break;
 		}
 	}
 
@@ -59,10 +62,27 @@ int main (int argc, char *argv[]) {
 		execvp("./server", cmd);																		// run server
 	}
 
-	FIFORequestChannel chan("control", FIFORequestChannel::CLIENT_SIDE);
+	vector<FIFORequestChannel*> channels;
+	FIFORequestChannel control_chan("control", FIFORequestChannel::CLIENT_SIDE);
+	channels.push_back(&control_chan);
 
 	//Task 4:
 	//Request a new channel
+
+	if (new_chan)
+	{
+		MESSAGE_TYPE nc = NEWCHANNEL_MSG;
+		control_chan.cwrite(&nc, sizeof(MESSAGE_TYPE));
+		char chan_buff[MAX_MESSAGE];
+		control_chan.cread(&chan_buff, MAX_MESSAGE);
+		string nc_name(chan_buff);
+		FIFORequestChannel* new_chan_instance = new FIFORequestChannel(nc_name, FIFORequestChannel::CLIENT_SIDE);
+		channels.push_back(new_chan_instance);
+		cout << nc_name << endl;
+	}
+
+	FIFORequestChannel chan = *(channels.back());  // channel to use
+
 	
 	//Task 2:
 	//Request data points
@@ -80,13 +100,14 @@ int main (int argc, char *argv[]) {
 	}
 	else if (p != -1)
 	{
+		// 1000 data points
 		ofstream received("received/x1.csv");
 		string path = "BIMDC/9.csv";
 		ifstream bimdc(path);
 		string line;
 		int count = 1;
 
-		while (getline(bimdc, line))
+		while (getline(bimdc, line)) // get line
 		{
 			if (count > 1000){
 				break;
@@ -96,7 +117,7 @@ int main (int argc, char *argv[]) {
 			vector<string> parsed_line;
 			std::stringstream ss(line);
 
-			while (getline(ss, item, ','))
+			while (getline(ss, item, ','))	// parse through the line
 			{
 				parsed_line.push_back(item);
 			}
@@ -155,7 +176,7 @@ int main (int argc, char *argv[]) {
 		char* buf3 = new char[buff_cap];
 
 		int i=0;
-		int n = file_length/buff_cap;
+		int n = file_length/buff_cap;			// streaming through file evenly
 		while (i < n)
 		{
 			filemsg* file_req = (filemsg*)buf2;
@@ -167,7 +188,7 @@ int main (int argc, char *argv[]) {
 			received.flush();
 			i++;
 		}
-		int r = file_length%buff_cap;
+		int r = file_length%buff_cap;			// streaming the remainder of the file
 		if (r != 0)
 		{
 			filemsg* file_req = (filemsg*)buf2;
@@ -186,7 +207,12 @@ int main (int argc, char *argv[]) {
 
 
 	//Task 5:
-	// Closing all the channels
-    MESSAGE_TYPE m = QUIT_MSG;
-    chan.cwrite(&m, sizeof(MESSAGE_TYPE));
+	MESSAGE_TYPE m = QUIT_MSG;
+	chan.cwrite(&m, sizeof(MESSAGE_TYPE));	// close channel that is being used
+	if (new_chan)
+	{
+		MESSAGE_TYPE m = QUIT_MSG;
+		channels[0]->cwrite(&m, sizeof(MESSAGE_TYPE));	// close other channel instantiated
+		delete channels.back();				// delete dynamically allocated channel
+	}
 }
