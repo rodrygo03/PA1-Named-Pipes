@@ -23,10 +23,13 @@ int main (int argc, char *argv[]) {
 	int p = -1;
 	double t = -1.0;
 	int e = -1;
+	size_t buff_cap = MAX_MESSAGE;      // optinal buffer capacity
 	string filename = "";
 
+	
+
 	//Add other arguments here
-	while ((opt = getopt(argc, argv, "p:t:e:f:")) != -1) {
+	while ((opt = getopt(argc, argv, "p:t:e:f:m:")) != -1) {
 		switch (opt) {
 			case 'p':
 				p = atoi (optarg);
@@ -40,16 +43,20 @@ int main (int argc, char *argv[]) {
 			case 'f':
 				filename = optarg;
 				break;
+			case 'm':
+				buff_cap = atoi (optarg);
+				break;
 		}
 	}
 
 	//Task 1:
 	//Run the server process as a child of the client process
+	
 	pid_t child = fork();
 	if (child == 0)
 	{
-		char* cmd[] = {(char*)"./server", (char*)"NULL"};		// arguments for server
-		execvp(cmd[0], cmd);									// run server
+		char* cmd[] = {(char*) "./server", (char*)"-m", (char*)to_string(buff_cap).c_str(), nullptr};	// arguments for server
+		execvp("./server", cmd);																		// run server
 	}
 
 	FIFORequestChannel chan("control", FIFORequestChannel::CLIENT_SIDE);
@@ -125,20 +132,59 @@ int main (int argc, char *argv[]) {
 
 	//Task 3:
 	//Request files
-	filemsg fm(0, 0);
-	string fname = "1.csv";
-	
-	int len = sizeof(filemsg) + (fname.size() + 1);
-	char* buf2 = new char[len];
-	memcpy(buf2, &fm, sizeof(filemsg));
-	strcpy(buf2 + sizeof(filemsg), fname.c_str());
-	chan.cwrite(buf2, len);
 
-	delete[] buf2;
-	__int64_t file_length;
-	chan.cread(&file_length, sizeof(__int64_t));
-	cout << "The length of " << fname << " is " << file_length << endl;
-	
+	if (filename != "")
+	{
+		filemsg fm(0, 0);
+		string fname = filename;
+		
+		int len = sizeof(filemsg) + (fname.size() + 1);
+		char* buf2 = new char[len];
+		memcpy(buf2, &fm, sizeof(filemsg));
+		strcpy(buf2 + sizeof(filemsg), fname.c_str());
+		chan.cwrite(buf2, len);
+
+		__int64_t file_length;
+		chan.cread(&file_length, sizeof(__int64_t));
+		cout << "The length of " << fname << " is " << file_length << endl;
+
+
+		string path = "received/" + filename;
+		ofstream received(path);
+
+		char* buf3 = new char[buff_cap];
+
+		int i=0;
+		int n = file_length/buff_cap;
+		while (i < n)
+		{
+			filemsg* file_req = (filemsg*)buf2;
+			file_req->offset = i*buff_cap;
+			file_req->length = buff_cap;
+			chan.cwrite(buf2, len);			
+			chan.cread(buf3, file_req->length);
+			received.write(buf3, buff_cap);
+			received.flush();
+			i++;
+		}
+		int r = file_length%buff_cap;
+		if (r != 0)
+		{
+			filemsg* file_req = (filemsg*)buf2;
+			file_req->offset = i*buff_cap;
+			file_req->length = file_length%buff_cap;
+			chan.cwrite(buf2, len);			
+			chan.cread(buf3, file_req->length);
+			received.write(buf3, file_length%buff_cap);
+			received.flush();
+		}
+
+		received.close();
+		delete[] buf2;
+		delete[] buf3;
+	}
+
+
 	//Task 5:
 	// Closing all the channels
     MESSAGE_TYPE m = QUIT_MSG;
