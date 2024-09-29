@@ -13,6 +13,7 @@
 #include "common.h"
 #include "FIFORequestChannel.h"
 #include <sstream>
+#include <chrono>
 
 using namespace std;
 
@@ -177,6 +178,7 @@ int main (int argc, char *argv[]) {
 
 		int i=0;
 		int n = file_length/buff_cap;			// streaming through file evenly
+		auto start = chrono::high_resolution_clock::now();
 		while (i < n)
 		{
 			filemsg* file_req = (filemsg*)buf2;
@@ -201,6 +203,9 @@ int main (int argc, char *argv[]) {
 		}
 
 		received.close();
+		auto end = chrono::high_resolution_clock::now();
+		chrono::duration<double> elapsed = end - start;
+		cout << elapsed.count() << endl;
 		delete[] buf2;
 		delete[] buf3;
 	}
